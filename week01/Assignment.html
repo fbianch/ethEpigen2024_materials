@@ -1,0 +1,39 @@
+---
+title: "Assigment"
+output: html_document
+date: "2024-02-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+install.packages(c("gsl","ggplot2","remotes","rmarkdown","UpSetR"))
+# If you haven't install Bioconductor yet:
+install.packages('BiocManager')
+BiocManager::install()
+
+BiocManager::install(c("GenomicRanges", "rtracklayer", "EnrichedHeatmap", "AnnotationHub", 
+                       "ensembldb", "edgeR", "esATAC", "sechm", "motifmatchr","rGREAT",
+                       "bsseq","DMRcate","data.table","InteractionSet","chromVAR","limma",
+                       "universalmotif", "MotifDb", "TFBSTools", "Biostrings", "PWMEnrich",
+                       "Rsubread","Rfastp"))
+BiocManager::install("Bioconductor/BiocFileCache")
+BiocManager::install("ETHZ-INS/epiwraps")
+```
+```{r}
+install.packages('epiwraps')
+library(epiwraps)
+```
+
+```{r}
+sessionInfo()
+```
+
