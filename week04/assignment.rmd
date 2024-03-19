@@ -1,0 +1,102 @@
+---
+title: "assignment"
+author: "Francesco Bianchi"
+date: "2024-03-19"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(rtracklayer)
+  library(epiwraps)
+  library(GenomicRanges)
+  library(R.utils)#for function gunzip
+  library(MASS) #to convert decimal to fraction
+})
+ah <- AnnotationHub()
+```
+*Find and download from ENCODE the peaks (i.e. bed-like format) for the following in mouse embryonic stem cells (mESC) :
+**Transcription factor p300 (==ep300 in ENCODE) histone modifications H3K4me3, H3K4me1, H3K27ac, and H3K27me3 (when there are replicates, we recommend using the bed file denoted as “conservative IDR thresholded peaks”)
+```{r}
+#p300
+download.file("https://www.encodeproject.org/files/ENCFF653YVR/@@download/ENCFF653YVR.bed.gz", destfile="p300.bed.gz")
+gunzip("p300.bed.gz")
+##import peaks
+p300 <- rtracklayer::import("p300.bed", format="narrowPeak")
+p300
+
+#H3K4me3
+download.file("https://www.encodeproject.org/files/ENCFF247GVM/@@download/ENCFF247GVM.bed.gz", destfile="H3K4me3.bed.gz")
+gunzip("H3K4me3.bed.gz")
+##import peaks
+H3K4me3 <- rtracklayer::import("H3K4me3.bed", format ="narrowPeak")
+H3K4me3
+
+#H3K4me1
+download.file("https://www.encodeproject.org/files/ENCFF333IJH/@@download/ENCFF333IJH.bed.gz", destfile="H3K4me1.bed.gz")
+gunzip("H3K4me1.bed.gz")
+##import peaks
+H3K4me1 <- rtracklayer::import("H3K4me1.bed", format ="narrowPeak")
+H3K4me1
+
+
+#H3K27ac
+download.file("https://www.encodeproject.org/files/ENCFF360VIS/@@download/ENCFF360VIS.bed.gz", destfile="H3K27ac.bed.gz")
+gunzip("H3K27ac.bed.gz")
+##import peaks
+H3K27ac <- rtracklayer::import("H3K27ac.bed", format ="narrowPeak")
+H3K27ac
+
+#H3K27me3
+download.file("https://www.encodeproject.org/files/ENCFF008XKX/@@download/ENCFF008XKX.bed.gz", destfile="H3K27me3.bed.gz")
+gunzip("H3K27me3.bed.gz")
+##import peaks
+H3K27me3 <- rtracklayer::import("H3K27me3.bed", format ="narrowPeak")
+H3K27me3
+```
+
+**QUESTION: Of the p300 peaks, what proportion overlap each of the marks?
+```{r}
+#How many p300 peaks?
+p300
+peakNumber <- 24596
+
+#H3K4me3
+peaksOverlapsH3K4me3 <- overlapsAny(p300, H3K4me3)
+sum(peaksOverlapsH3K4me3)
+
+#calculate proportion of peaks that overlap from all peaks
+overlProportionH3K4me3 <- sum(peaksOverlapsH3K4me3)/peakNumber
+fractions(overlProportionH3K4me3)
+
+#H3K4me1
+peaksOverlapsH3Kme1 <- overlapsAny(p300, H3K4me1)
+sum(peaksOverlapsH3Kme1)
+
+overlProportionH3K4me1 <- sum(peaksOverlapsH3Kme1)/peakNumber
+fractions(overlProportionH3K4me1)
+
+#H3K27ac
+peaksOverlapsH3K27ac <- overlapsAny(p300, H3K27ac)
+sum(peaksOverlapsH3K27ac)
+
+overlProportionH3K27ac <- sum(peaksOverlapsH3K27ac)/peakNumber
+fractions(overlProportionH3K27ac)
+
+#H3K27me3
+peaksOverlapsH3K27me3 <- overlapsAny(p300, H3K27me3)
+sum(peaksOverlapsH3K27me3)
+
+overlProportionH3K27me3 <- sum(peaksOverlapsH3K27me3)/peakNumber
+fractions(overlProportionH3K27me3)
+
+```
+Answer: 
+H3K4me3: 62/201 (=8742/28341) of peaks overlap marks
+H3K4me1: 6905/28341 of peaks overlap marks
+H3K27ac: 13502/28341 of peaks overlap marks
+H3K27me3: 56/28341 of peaks overlap marks
+
+
+
