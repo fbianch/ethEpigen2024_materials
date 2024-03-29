@@ -1,0 +1,111 @@
+---
+title: "assignment5"
+author: "Francesco Bianchi"
+date: "2024-03-27"
+output: html_document
+
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(rtracklayer)
+  library(epiwraps)
+  library(GenomicRanges)
+  library(R.utils)#for function gunzip
+  library(MASS) #to convert decimal to fraction
+  library(knitr)
+  library(ensembldb)
+  library(ggplot2)
+})
+ah <- AnnotationHub()
+```
+
+#Using the peaks you downloaded last week, identify bivalent domains (H3K27me3 + H3K4me3) in mouse embryonic stem cells (mESC)
+#Meaning find overlaps between H3K27me3 + H3K4me3
+```{r}
+getwd()
+setwd("/Users/francesco/Library/CloudStorage/OneDrive-Personal/Studium/Master/S9/Epigenetics/Week 5")
+
+H3K4me3 <- rtracklayer::import("H3K4me3.bed", format="narrowPeak")
+H3K27me3 <- rtracklayer::import("H3K27me3.bed", format="narrowPeak")
+bivDomains <- overlapsAny(H3K4me3,H3K27me3)
+sum(bivDomains)
+
+bivDomainsPeaks <- findOverlaps(H3K27me3,H3K4me3)
+bivDomainsPeaks
+
+#create subset from overlapping peaks
+subset <- H3K4me3[bivDomains[TRUE]]
+
+```
+#Question: what happens to those regions upon differentiation?
+Upon differentation, the pluripotent stem cells will 'decide' for one state, to monovalent states that are either activated (H3K4me3) or repressed (H3K27me3). 
+
+
+#Choose one differentiated cell type (e.g. hepatocytes, neural progenitor, or smooth muscle cells)
+#Download the H3K27me3 and H3K4me3 peaks from this cell type
+#Hepatocyte
+```{r}
+getwd()
+setwd("/Users/francesco/Library/CloudStorage/OneDrive-Personal/Studium/Master/S9/Epigenetics/Week 5")
+
+#H3K27me3
+download.file("https://www.encodeproject.org/files/ENCFF900AWR/@@download/ENCFF900AWR.bed.gz", destfile="hepa.H3K27me3.bed.gz")
+gunzip("hepa.H3K27me3.bed.gz")
+##import peaks
+hepaH3K27me3peaks <- rtracklayer::import("hepa.H3K27me3.bed", format ="narrowPeak")
+hepaH3K27me3peaks
+
+#H3K4me3
+download.file("https://www.encodeproject.org/files/ENCFF259DMR/@@download/ENCFF259DMR.bed.gz", destfile="hepa.H3K4me3.bed.gz")
+gunzip("hepa.H3K4me3.bed.gz")
+##import peaks
+hepaH3K4me3peaks <- rtracklayer::import("hepa.H3K4me3.bed", format ="narrowPeak")
+hepaH3K4me3peaks
+
+```
+
+#Find the bivalent regions
+```{r}
+
+## Bivalent regions for (H3K27me3 + H3K4me3)
+overlap_bivalent1 <- suppressWarnings(subsetByOverlaps(H3K4me3, H3K27me3))
+number_overlap_bivalent1 <- length(unique(overlap_bivalent1))
+print(paste('H3K27me3 and H3K4me3 have ', number_overlap_bivalent1, 'bivalent regions'))
+
+##Bivalent regions for hepatocytes (H3K27me3 + H3K4me3)
+
+overlap_bivalent_hepa <- suppressWarnings(subsetByOverlaps(hepaH3K27me3peaks, hepaH3K4me3peaks))
+number_overlap_bivalent_hepa <- length(unique(overlap_bivalent_hepa))
+
+print(paste(' H3K27me3 and H3K4me3 Hepatocytes  have', number_overlap_bivalent_hepa, 'bivalent regions'))
+```
+
+#Find the overlaps
+
+```{r}
+
+getwd()
+setwd("/Users/francesco/Library/CloudStorage/OneDrive-Personal/Studium/Master/S9/Epigenetics/Week 5")
+#1 mESC bivalent domain with hepatocyte H3K27me3
+
+overlaps_mESC_HepH3K27me3 <- findOverlaps(overlap_bivalent1, hepaH3K27me3peaks)
+number_overlaps_H3K27me3 <- length(unique(queryHits(overlaps_mESC_HepH3K27me3)))
+print(paste('The mESC bivalent domain has',  number_overlaps_H3K27me3, 'overlaps  with hepatocyte H3K27me3 '))
+
+#2 mECS bivalent domain with hepatocyte H3K4me3
+overlaps_mESC_HepH3K4me3 <- findOverlaps(overlap_bivalent1, hepaH3K4me3peaks)
+number_overlaps_H3K4me3 <- length(unique(queryHits(overlaps_mESC_HepH3K4me3)))
+
+print(paste('The mESC bivalent domain has',  number_overlaps_H3K4me3, 'overlaps  with hepatocyte H3K4me3 '))
+
+#3 Overlap between the bivalent domain in mESC and hepatocytes
+
+total_overlaps <- findOverlaps(overlap_bivalent1, overlap_bivalent_hepa)
+number_total_overlaps <- length(unique(queryHits(total_overlaps)))
+
+
+print(paste('The mESC bivalent domain has',  number_total_overlaps, 'overlaps  with the bivalent domain of the hepatocytes '))
+```
+
