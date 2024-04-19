@@ -1,0 +1,102 @@
+---
+title: "assignment6"
+author: "Francesco Bianchi"
+date: "2024-04-18"
+output: html_document
+---
+
+```{r}
+BiocManager::install("GO.db")
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(GenomicRanges)
+  library(ggplot2)
+  library(MotifDb)  #database of motifs
+  library(Biostrings) # for handling sequences
+  library(motifmatchr) # for scanning sequences for matches of given motifs
+  library(TFBSTools) # for handling some motif formats
+  library(universalmotif) # for converting motifs to various formats
+})
+```
+
+#Choose a transcription factor -> REST 
+#Download the peaks
+
+```{r}
+dir.create("peaks")
+download.file("https://www.encodeproject.org/files/ENCFF368VWJ/@@download/ENCFF368VWJ.bed.gz", dest="peaks/REST.bed.gz")
+peaks_REST <- rtracklayer::import("peaks/REST.bed.gz", format = "narrowPeak")
+
+seqlevelsStyle(peaks_REST) <- "Ensembl"  # to change the convention of the chromosome names to chr1
+peaks_REST_1 <- peaks_REST[seqnames(peaks_REST)=="1"]
+peaks_REST_1
+```
+
+```{r}
+#download genome data 
+ah <- AnnotationHub()
+MouseGenome <- AnnotationHub::query(ah, c("Mus_musculus", "Ensembl", "GRCm38"))
+MouseGenome
+
+genom <- ah[["AH88475"]]
+
+# we'll load it into memory:
+genome_seqs <- rtracklayer::import(genom)
+
+# Write the genomic sequences to a FASTA file
+Biostrings::writeXStringSet(genome_seqs, "genome.fa") #converting the genome_seqs to the fasta format for the motif matching analysis
+fa_file <- Rsamtools::FaFile("genome.fa")
+```
+
+
+###Getting the desired motif
+```{r, eval=FALSE}
+# we search for "REST " in the motif database
+REST_motifs <- query(MotifDb, "REST")
+REST_motifs
+
+# we also need to convert the motif to a format that this package will accept -> write the sequence to a fasta (fa) datei
+REST_motifs_fa <- setNames(do.call(TFBSTools::PWMatrixList, convert_motifs(REST_motifs, class="TFBSTools-PWMatrix")), names(REST_motifs))
+print(REST_motifs_fa)
+
+# Motif matching for peaks in chr1
+motif_chr1 <- motifmatchr::matchMotifs(REST_motifs_fa, subject=peaks_REST_chr1, genome=fa_file, out="positions") #specify that we want the function to return the genomic position of each motif match
+motif_chr1
+
+# Motif matching across the genome
+motif_matched <- matchMotifs(REST_motifs_fa, subject=genome_seqs, out="positions")[[1]]
+# to transform the output to GRanges:
+names(motif_matched) <- names(genome_seqs)
+motif_across_genome <- as(motif_matched, "GRanges")
+```
+
+###Answer the following questions:
+```{r, eval=FALSE}
+##Of all the peaks in chr1, what proportion contains a motif for the factor?
+peaks_containing_motif <- overlapsAny(peaks_REST_chr1, moi)
+proportion_peaks_motif <- (sum(peaks_containing_motif) / length(peaks_REST_chr1))*100
+
+#Of all instances of that motif in the genome, what proportion is bound by the factor (i.e. has a peak)?
+motif_instances_bound_by_REST <- overlapsAny(motif_across_genome, peaks_REST_chr1)
+proportion_motif_instances_bound_by_REST <- (sum(motif_instances_bound_by_REST) / length(motif_across_genome))*100
+
+cat("Of the", length(peaks_REST_chr1), "peaks in Chromosome 1,", sum(peaks_containing_motif), "(", proportion_peaks_motif, "%)", "contain a motif.\n")
+cat("Of all", length(motif_across_genome), "instances of that motif in the genome,", sum(motif_instances_bound_by_REST), "(", proportion_motif_instances_bound_by_REST, "%)", "is bound by REST (has a peak).\n")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
