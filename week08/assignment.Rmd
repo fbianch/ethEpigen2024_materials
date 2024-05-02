@@ -1,0 +1,138 @@
+---
+title: "assignment8"
+author: "Francesco Bianchi"
+date: "2024-05-02"
+output: html_document
+---
+
+
+```{r}
+suppressPackageStartupMessages({
+  library(epiwraps)
+  library(motifmatchr)
+  library(MotifDb)
+  library(universalmotif)
+  library(ggplot2)
+  library(SummarizedExperiment) # data structure
+  library(sechm) # for plotting heatmaps from a SummrizedExperiment
+  library(BiocParallel) # for multithreading
+  library(chromVAR) # for motif accessibility estimation
+  library(limma) # for statistical analysis  
+  library(ComplexHeatmap)       # For plotting heatmaps
+  library(circlize)             # Dependency for ComplexHeatmap
+  library(TFBSTools)
+  library(reshape2) # For melting the data frame
+  library(AnnotationHub)
+})
+
+# to control multithreading, unix users can use:
+register(MulticoreParam(4))
+
+```
+
+Dowbnload the data
+
+```{r}
+options(timeout=6000)
+file_path <- "peak/ATAC_Peaks.rds"
+if (!file.exists(file_path)) {
+  dir.create("peak", showWarnings = FALSE)
+  download.file("https://ethz-ins.org/content/mouse_mm38_hippocampus.peakCounts.SE.rds", destfile = file_path, mode = "wb")
+}
+peaks <- readRDS(file_path)
+
+# get the genome of the mouse
+dir.create("genome")
+ah <- AnnotationHub()
+genome <- ah[["AH68356"]]
+genome_seqs <- import(genome)
+Biostrings::writeXStringSet(genome_seqs, "genome.fa")
+# preparing the genome sequence file
+genome_fa <- Rsamtools::FaFile("genome.fa")
+```
+
+Get the motifs:
+```{r}
+motifs <- MotifDb::query(MotifDb, "Mus")
+# convert to a format motifmatchr can use, and use the gene symbols as names
+motifs <- do.call(TFBSTools::PWMatrixList, setNames(universalmotif::convert_motifs(motifs, class="TFBSTools-PWMatrix"), mcols(motifs)$geneSymbol)) #setname -> we are gona name the motifs simply by their geneSymbol
+
+```
+
+```{r}
+#Add GC Bias and Match Motifs
+se <- addGCBias(peaks, genome = genome_fa)
+moi <- matchMotifs(motifs, subject = se, genome = genome_fa)
+
+assay(se) <- as.matrix(assay(se))
+
+
+bg <- getBackgroundPeaks(object = assays(se)$counts, niterations = 1000, bias = rowData(se)$bias)
+dev <- chromVAR::computeDeviations(object =as.matrix(assays(se)$counts), annotations=as.matrix(assay(moi)), background_peaks=bg) #each of the rows is a motif -> relative score for acessability
+
+
+colData(dev)$condition <- rep(c("CTRL", "FSS"), each = 6)
+colData(dev)$sex <- rep(c("Female", "Female", "Female", "Male", "Male", "Male"))
+
+mm <- model.matrix(~ sex + condition, data = colData(dev))
+fit <- eBayes(lmFit(assays(dev)$z, mm))
+```
+# Differential analysis
+
+
+```{r}
+# FSS vs CTRL
+res_stress <- as.data.frame(limma::topTable(fit, coef="conditionFSS", number = Inf)) 
+head(res_stress)
+dim(res_stress)
+res_stress$TF <- row.names(res_stress)
+res_stress <- res_stress[!duplicated(res_stress$ID), ] 
+row.names(res_stress) <- res_stress$ID
+
+ggplot(res_stress, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text() 
+
+library(dplyr)
+significant_motifs_stress <- res_stress %>%
+  filter(adj.P.Val < 0.05) %>%  
+  arrange(adj.P.Val) 
+head(significant_motifs_stress, 6) 
+
+# Male vs Female
+res_sex <- as.data.frame(limma::topTable(fit, coef="sexMale", number = Inf)) 
+head(res_sex)
+dim(res_sex)
+res_sex$TF <- row.names(res_sex)
+res_sex <- res_sex[!duplicated(res_sex$ID), ] 
+row.names(res_sex) <- res_sex$ID
+
+ggplot(res_sex, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text() 
+
+library(dplyr)
+significant_motifs_sex <- res_sex %>%
+  filter(adj.P.Val < 0.05) %>%  
+  arrange(adj.P.Val) 
+head(significant_motifs_sex, 6) 
+
+# Combine the results
+combined_motifs <- rbind(significant_motifs_stress, significant_motifs_sex)
+
+# Create annotations
+condition_annotation <- colData(dev)$condition  # 'condition' should be a column indicating 'CTRL' or 'FSS'
+condition_annotation_factor <- factor(condition_annotation, levels = c("CTRL", "FSS"))
+sex_annotation <- colData(dev)$sex  # 'sex' should be a column indicating 'male' or 'female'
+sex_annotation_factor <- factor(sex_annotation, levels = c("male", "female"))
+
+col_annotation <- HeatmapAnnotation(
+  condition = condition_annotation_factor,
+  sex = sex_annotation_factor,
+  col = list(condition = c(CTRL = "blue", FSS = "red"), sex = c(male = "orange", female = "green"))
+)
+
+# Plot the heatmap
+sechm(dev, features = head(row.names(combined_motifs)), assayName="z", top_annotation = col_annotation, breaks = 1)
+```
+Differential expression: The heatmap shows differences in the accessibility of motifs between conditions (CTRL vs. FSS) and genders (male vs. female) for each motif.
+For example, if certain cells consistently show a different colour intensity in the FSS condition (red top bar) than in the CTRL condition (blue top bar), this indicates a change in motif activity due to the stress condition.
+Motif analysis:
+High activity (blue): Motifs such as NR3C1 and GCR show a higher level of activity under certain conditions and in certain genders. For example, NR3C1 shows high activity in all samples except for females under CTRL, where activity is intermediate.
+Low activity (yellow): Motifs such as ANDR and Ar show lower activity levels, especially under certain conditions or in certain sexes. For example, ANDR shows very low activity in males and females under CTRL conditions.
