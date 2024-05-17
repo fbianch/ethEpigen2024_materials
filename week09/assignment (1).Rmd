@@ -1,0 +1,20 @@
+---
+title: "Week 9 - Project Plan"
+author: "Francesco Bianchi and Lukas Häuser"
+date: "2024-05-09"
+output: html_document
+---
+
+We plan to reproduce the analysis from the paper "Common modes of ERK induction resolve into context specific signalling via a combination of signal duration and cell type specific transcriptional repression" by Marta Perera and Joshua Brickman (GSE259237).
+
+The aim of the paper was to explore context dependent extracellular signal-regulated kinases (ERK) in embryonic development and differentiation.
+
+The authors found that variations in response to ERK are mostly mediated by repression of transcriptional targets that occur together with reductions in chromatin accessibility at regulatory regions. Further, immediate early ERK responses are largely shared by different cell types, but become refined producing cell-specific programs as increasing durations of signalling interface with cell specific gene regulatory networks. Induction in naïve pluripotency is accompanied by chromatin changes, whereas in later stages it is not, suggesting that chromatin context doesn’t shape signalling response.
+
+They studied cell and mouse lines. There are two kinds of data. Firstly, the authors gathered bulk RNA sequencing data. Secondly, ATAC-seq data was produced.
+
+For the bulk RNA seqeuncing (RNA-seq) data from the cells lines, 4 biological replicates were collected per sample (ESCs vs RSCs vs EpiLCs) and per condition (0h vs 2h vs 4h vs rev), defined as 2 different passages of 2 independent clones. Further bulk RNA-seq data comes from epiblasts of E3.5 and E5.5 mice.
+
+At first, raw bulk RNA-seq reads must be mapped and the count table generated from them. Next, we want to perform quality control. One sample of 0h EpiLCs and 1 sample of 0h E3.5 were discarded by the authors by to quality issues, which we would like to investigate. Then, we pefrom principal component analysis using the prcomp function and differential expression analysis using DESeq2 and factoextra. Next, Hierarchical clustering is performed using the hclust function and enrichment of GO terms determined using the clusterProfiler package.
+
+For the ATAC-seq data, raw reads are processed with bcl2fastq, adapters trimmed, and reads mapped to mm10. Peaks are called using macs2 and consensus peaks per condition defined from the replicates per condition using the DiffBind package. Promoter regions are then removed using the Eukaryotic Promoter Database. Reads within defined peaks are counted. From the counts we generate a count table for downstream differential enrichment analysis using DESeq2, to obtain the Log2 Fold Change (log2FC) enrichment per peak before and after ERK induction. Overlap of peaks between conditions are determined. Lastely, motif analysis and peak annotation are performed.
