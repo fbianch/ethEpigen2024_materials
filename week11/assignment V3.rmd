@@ -1,0 +1,152 @@
+---
+title: "assignment 11"
+author: "Francesco Bianchi"
+date: "2024-05-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+suppressPackageStartupMessages({
+  library(GenomicRanges)
+  library(epiwraps)
+  library(ggplot2)
+  library(rGREAT)
+  library(AnnotationHub)
+  library(ensembldb)
+  library(bsseq)
+  library(BiocParallel)
+  library(edgeR)
+  library(DMRcate)
+  library(rtracklayer)
+  library(sechm)
+  library(pheatmap)
+  library(viridis)
+  library(data.table)
+})
+
+ah <- AnnotationHub()
+set.seed(40)
+options(timeout = 6000)
+```
+
+
+```{r, download, eval=FALSE}
+# Download data
+download.file("https://ethz-ins.org/content/w11_practical.zip", "w11_practical.zip")
+dir.create("./w11_practical")
+unzip("w11_practical.zip", exdir="./w11_practical")
+```
+
+```{r, bsseq}
+bs_path <- "bs.rds"
+dmr_path <- "dmr.rds"
+
+local_path <- "/Users/francesco/Library/CloudStorage/OneDrive-Personal/Studium/Master/S9/Epigenetics/Week11/w11_practical"
+setwd(local_path)
+
+# Check if the files exist before reading
+bs <- readRDS('bs.rds')
+
+```
+
+# Testing
+
+```{r}
+# Get annotations
+ensdb <- ah[["AH109336"]]
+chr22 <- GRanges(seqnames=Rle(c("22")), ranges=IRanges(1, end=50818468))
+genesChr22 <- genes(ensdb, columns=c("gene_seq_start", "gene_seq_end", "gene_name"), filter=GRangesFilter(chr22))
+seqlevelsStyle(genesChr22) <- "UCSC"
+
+# Get promoters
+tssMargin <- 200
+promotersChr22 <- promoters(ensdb, upstream=tssMargin, downstream=tssMargin, filter=GRangesFilter(chr22), columns=c("gene_name"))
+seqlevelsStyle(promotersChr22) <- "UCSC"
+
+```
+
+## Get methylation of the genes
+
+```{r}
+# Calculate methylation levels
+metPr <- bsseq::getMeth(bs, regions=genesChr22, what="perRegion")
+colnames(metPr) <- colnames(bs)
+rownames(metPr) <- genesChr22$gene_name
+metPr <- metPr[!is.na(rowSums(metPr)),]
+
+annotation <- as.data.frame(pData(bs)[,c("Type","Pair")])
+rownames(annotation) <- colnames(metPr)
+
+# Plot heatmap
+pheatmap(metPr, cluster_rows=TRUE, cluster_cols=FALSE, annotation_col=annotation, show_rownames=TRUE, color=rocket(10))
+
+```
+
+Differential methylation testing: 
+```{r}
+design <- model.matrix(~Type+Pair, data=pData(bs))
+methdesign <- modelMatrixMeth(design)
+seqAnnot <- sequencing.annotate(bs, methdesign, all.cov=TRUE, coef="Typenormal")
+
+dmrcateRes <- dmrcate(seqAnnot, C=2, min.cpgs=10, pcutoff=0.01)
+dmrRanges <- extractRanges(dmrcateRes, genome="hg38")
+
+# Plot DMR
+DMR.plot(dmrRanges, dmr=1, phen.col=c(rep("#E69F00", 3), rep("#56B4E9", 3)), group.means=TRUE, CpGs=bs, genome="hg38")
+
+dmrRangesGenes <- dmrRanges[!is.na(dmrRanges$overlapping.genes)]
+
+```
+
+
+```{r}
+# Extract genes within DMRs
+
+topIdx <- order(dmrRangesGenes$min_smoothed_fdr)[1:5]
+genesDmr <- unlist(tstrsplit(dmrRangesGenes[topIdx]$overlapping.genes, split=", "))
+genesDmr <- genesDmr[!is.na(genesDmr)]
+dmrGenes <- genesChr22[genesChr22$gene_name %in% genesDmr]
+dmrGenes
+```
+
+# Enrichment analysis (rGREAT) 
+
+```{r, GREAT job}
+# Enrichment analysis
+job <- submitGreatJob(gr=dmrGenes, bg=genesChr22, species="hg38")
+res <- getEnrichmentTables(job)
+
+# Plot enrichment results
+bp <- res$`GO Biological Process`
+ggplot(head(bp, 15), aes(Hyper_Fold_Enrichment, reorder(name, Hyper_Adjp_BH), size=Hyper_Foreground_Region_Hits, color=-log10(Hyper_Adjp_BH))) +
+  geom_point() +
+  scale_color_viridis_c(limits=c(0, 5))
+```
+
+
+
+
+
+
+
+# Enrichment Analysis results 
+
+Summary of the Three Graphics
+
+Heatmap of Methylation Levels:
+
+Key Insight: This heatmap shows distinct clustering of methylation patterns between cancer and normal samples. The clustering indicates that the methylation profiles are significantly different between the two conditions. This pattern supports the idea that differential methylation is associated with cancer and can distinguish cancerous tissues from normal ones.
+
+Genomic Visualization of DMRs:
+
+Key Insight: This plot provides a detailed view of chromosome 22, highlighting specific regions where differential methylation occurs. Notably, genes like CCDC117 and XBP1 are located near DMRs. This visualization indicates that these genes might be influenced by methylation changes, potentially affecting their expression and playing roles in cancer development or progression.
+
+Enrichment Analysis Dot Plot:
+
+Key Insight: This plot shows which biological processes are significantly enriched in the differentially methylated regions (DMRs). The most notable processes include tRNA modification, mitochondrial RNA processing, and cell-cell adhesion via plasma-membrane adhesion molecules. The enrichment of these processes suggests that changes in methylation may be impacting key cellular functions, including protein synthesis, mitochondrial function, and cell adhesion, which could be critical in the context of cancer.
+
+
+
+
+
