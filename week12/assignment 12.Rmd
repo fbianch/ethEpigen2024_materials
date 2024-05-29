@@ -1,0 +1,72 @@
+---
+title: "Assignment 12"
+author: "Francesco Bianchi"
+date: "2024-05-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+suppressPackageStartupMessages({
+  library(GenomicRanges)
+  library(AnnotationHub)
+  library(ensembldb)
+  library(InteractionSet)
+  library(rtracklayer)
+  library(epiwraps)
+})
+options(timeout = 10000)
+```
+
+# Download data 
+
+```{r}
+# Download data
+download.file("https://www.encodeproject.org/files/ENCFF776TFX/@@download/ENCFF776TFX.bed.gz", "p300.narrowPeak.gz")
+download.file("https://ethz-ins.org/content/hg38.SalviatoDistalEnhancerTargets.GR.rds", "salviato.rds")
+
+# Import data
+peaks <- rtracklayer::import("p300.narrowPeak.gz")
+seqlevelsStyle(peaks) <- "ensembl"
+targetSalviato <- readRDS("salviato.rds")
+seqlevelsStyle(targetSalviato) <- "ensembl"
+
+# Annotate peaks
+hubCache(AnnotationHub())
+ah <- AnnotationHub()
+ensdb <- ah[["AH95744"]]
+annotatedPeaks <- epiwraps::annotateRegions(peaks, ensdb)
+```
+
+```{r}
+# Define promoter regions
+promoters_2_10kb <- flank(targetSalviato, width = 10000, start = TRUE) %>% resize(width = 12500, fix = "start")
+promoters_10kb_plus <- flank(targetSalviato, width = 10000, start = TRUE, both = TRUE)
+
+# Identify peaks within 2.5kb to 10kb from TSS
+peaks$overlaps_2_10kb <- overlapsAny(peaks, promoters_2_10kb)
+peaks_2_10kb <- peaks[peaks$overlaps_2_10kb]
+
+# Identify peaks more than 10kb from TSS
+peaks$overlaps_10kb_plus <- overlapsAny(peaks, promoters_10kb_plus)
+peaks_10kb_plus <- peaks[peaks$overlaps_10kb_plus]
+```
+
+```{r}
+# Find overlaps and calculate proportions
+find_overlaps_and_calculate <- function(peaks_subset, target_subset) {
+  overlaps <- findOverlaps(peaks_subset, target_subset)
+  mcols(peaks_subset)[from(overlaps), "target"] <- target_subset[to(overlaps)]$target
+  mcols(peaks_subset)$target <- CharacterList(mcols(peaks_subset)$target)
+  nearest_TSS_count <- sum(sapply(mcols(peaks_subset)$target, length) > 0)
+  total_peaks <- length(peaks_subset)
+  proportion <- round(nearest_TSS_count / total_peaks, 4)
+  return(proportion)
+}
+
+proportion_2_10kb <- find_overlaps_and_calculate(peaks_2_10kb, targetSalviato)
+proportion_10kb_plus <- find_overlaps_and_calculate(peaks_10kb_plus, targetSalviato)
+```
+
+
+### Of the genes that are between 2.5 and 10kb from the nearest TSS, 0.0139 % form an interaction with that nearest gene. Of the genes that are more than 10kb away from the nearest TSS,  0.0128 % form an interaction with that nearest gene. ###
+
